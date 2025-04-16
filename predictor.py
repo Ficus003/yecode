@@ -1,13 +1,30 @@
 import torch
 import re
 from transformers import BertForSequenceClassification, BertTokenizer
-from config import INTENT_LABELS
+from config import INTENT_LABELS, PREDEFINED_PARAMS, KG_PARAM_TYPES
 
 class IntentPredictor:
     def __init__(self, model_path):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = BertForSequenceClassification.from_pretrained(model_path).to(self.device)
         self.tokenizer = BertTokenizer.from_pretrained(model_path)
+        self.model.eval()  #推理模式
+
+    #识别文本意图，提取参数
+    def parse(self, text):
+        intent = self.predict(text)   #BERT预测意图
+
+        params = {}
+
+        if intent in PREDEFINED_PARAMS:
+            param_value = self.extract_keyword(text,PREDEFINED_PARAMS[intent].keys())
+
+            if param_value:
+                params[intent] = PREDEFINED_PARAMS[intent][param_value]
+        elif intent in KG_PARAM_TYPES:
+            params[f"{intent}_text"] = text
+
+        return intent, params
 
     def predict(self, text, confidence_threshold=0.7):
 
@@ -20,26 +37,19 @@ class IntentPredictor:
             padding=True,      #自动填充
             truncation=True,    #截断文本
             max_length=128     #最长长度
-        )
-
-        inputs = {key: value.to(self.device) for key, value in inputs.items()}
-        self.model.to(self.device)     #数据迁移到cuda
+        ).to(self.device)     #数据迁移到cuda
 
         #模型预测
-        with torch.inference_mode():    #预测时关闭梯度，节省内存
+        with torch.no_grad():    #预测时关闭梯度，节省内存
             outputs = self.model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1)  #outputs.logits模型输出的原始得分,softmax将得分转换成概率分布
-            confidence, pred = torch.max(probs, dim=1)     #寻找概率最大的类别，返回预测标签与置信度
+            pred = torch.argmax(outputs.logits).item()
 
-            # 应用置信度阈值
-        intent = INTENT_LABELS[pred.item()]
-        confidence_value = confidence.item()
+        return INTENT_LABELS[pred]     #返回预测意图
 
-        if confidence_value < confidence_threshold:     #如果置信度小于置信度阈值0.7则返回"unknown",防止系统乱猜
-            intent = "unknown"
+    def extract_keyword(text, keywords):
 
-        return {
-            "intent":intent,
-            "confidence":confidence_value}     #返回预测意图与置信度,flask接口需要字典格式
+        for key in keywords:
+            if key in text:
+                return key
 
-
+        return None
