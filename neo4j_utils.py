@@ -61,35 +61,74 @@ def build_user_profile(rating_csv_path, graph):
         print(f"【ERROR】知识图谱构建失败：{str(e)}")
         raise
 
+#封装知识图谱查询函数
 
+class KHQuery:
+    def __init__(self):
+        self.graph = safe_graph_connect()
 
-
-
+    def fuzzy_query(self, param_type, text):
+        """
+        判断参数'cuisine''flavor''ingredient'，返回对应模糊查询函数
+        :param param_type: 查询类型, 'cuisine''flavor''ingredient'
+        :param text: 用户输入的文本
+        :return: 对应模糊查询函数
+        """
+        if param_type =="cuisine":
+            return self.query_cuisine(text)
+        elif param_type == "flavor":
+            return self.query_flavor(text)
+        elif param_type == "ingredient":
+            return self.query_ingredient(text)
+        return None
 #……………………………………………………………………
 #查询功能
 #……………………………………………………………………
 
-def recommend_by_cuisine(cuisine,graph):
-    try:
-        query = """
-        MATCH (d:Dish)-[:属于]->(c:Cuisine)
-        WHERE toLower(c.name) CONTAINS toLower($cuisine)
-        RETURN d.name as dish, d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
-        """
-        return graph.run(query, cuisine=cuisine).data()
-    except Exception as e:
-        print(f"[错误]菜系查询失败：{str(e)}")
-        return []
+    def query_cuisine(self, text):
+        try:
+            #返回名字最短的菜名
+            query = """
+            MATCH(d:Dish)-[:属于]->(c:Cuisine)
+            WHERE toLower(c.name) CONTAINS toLower($text)
+            RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            ORDER BY length(d.name) ASC
+            LIMIT 1
+            """
+            return self.graph.run(query, text=text).data()
+        except Exception as e:
+            print(f"[错误]菜系查询失败：{str(e)}")
+            return []
 
-def recommend_by_ingredient(ingredient,graph):
-    try:
-        query = """
-        MATCH (d:Dish)-[:包含]->(i:Ingredient)
-        WHERE toLower(i.name) CONTAINS toLower($ingredient)
-        RETURN d.name as dish, d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
-        """
-        return graph.run(query, ingredient=ingredient).data()
-    except Exception as e:
-        print(f"[错误]食材查询失败：{str(e)}")
-        return []
 
+    def query_ingredient(self, text):
+        try:
+            query = """
+            MATCH(d:Dish)-[:包含]->(i:Ingredient)
+            WHERE toLower(i.name) CONTAINS toLower($text)
+            RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            ORDER BY length(d.name) ASC
+            LIMIT 1
+            """
+            return self.graph.run(query, text=text).data()
+
+        except Exception as e:
+            print(f"[错误]食材查询失败：{str(e)}")
+            return []
+
+    def query_flavor(self,text):
+        try:
+            #SPLIT以逗号分隔，把flavor字符分割成列表
+            #ANY关键字检查是否有一个flavor与用户输入的文本对应
+            query = """
+            MATCH(d:Dish)
+            ANY (flavor IN SPLIT(d.flavor, ',') WHERE toLower(flavor) IN $text)
+            RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            ORDER BY length(d.name) ASC
+            LIMIT 1
+            """
+            return self.graph.run(query, text=text).data()
+
+        except Exception as e:
+            print(f"[错误]食材查询失败：{str(e)}")
+            return []
