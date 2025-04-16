@@ -10,19 +10,21 @@ class IntentPredictor:
         self.tokenizer = BertTokenizer.from_pretrained(model_path)
         self.model.eval()  #推理模式
 
-    #识别文本意图，提取参数
+    #解析函数，识别文本意图，提取参数
     def parse(self, text):
         intent = self.predict(text)   #BERT预测意图
+        params = {}  #创建字典，存放参数
 
-        params = {}
-
+        #根据提取出的意图，提取参数
         if intent in PREDEFINED_PARAMS:
-            param_value = self.extract_keyword(text,PREDEFINED_PARAMS[intent].keys())
-
+            #如果参数为特定数值参数
+            param_value = self.extract_keyword(text,list(PREDEFINED_PARAMS[intent].keys()))
             if param_value:
+                #将关键词映射成实际参数（int）
                 params[intent] = PREDEFINED_PARAMS[intent][param_value]
+
         elif intent in KG_PARAM_TYPES:
-            params[f"{intent}_text"] = text
+            params[f"{intent}_text"] = text  #直接返回文本给图谱查询
 
         return intent, params
 
@@ -46,6 +48,7 @@ class IntentPredictor:
 
         return INTENT_LABELS[pred]     #返回预测意图
 
+    @staticmethod
     def extract_keyword(text, keywords):
 
         for key in keywords:
