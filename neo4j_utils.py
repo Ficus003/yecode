@@ -46,6 +46,24 @@ def build_knowledge_graph(csv_path,graph):
     except Exception as e:
         print(f"【ERROR】知识图谱构建失败：{str(e)}")
         raise
+#创建用户画像图谱
+def build_user_profile(rating_csv_path, graph):
+    try:
+        rating_df = pd.read_csv(rating_csv_path)
+        for _, row in rating_df.iterrows():
+            user = Node("User", user_id=row['user_id'])
+            dish = Node("Dish",name=row['dish_id'])
+
+            rated = Relationship(user, "评分", dish, rating=int(row['rating']))
+            graph.merge(rated)
+
+    except Exception as e:
+        print(f"【ERROR】知识图谱构建失败：{str(e)}")
+        raise
+
+
+
+
 
 #……………………………………………………………………
 #查询功能
