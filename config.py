@@ -6,14 +6,11 @@ PREDEFINED_PARAMS = {
 }
 
 #模糊参数定义
-KG_PARAM_TYPES = ["cuisine", "ingredient", "flavor"]
+KG_PARAM_TYPES = ["cuisine", "ingredient", "flavor", "exclude_ingredient"]
 
 # BERT模型意图标签
 INTENT_LABELS = [
     "recommend",
-    "search_ingredient",
-    "search_flavor",
-    "diet_restriction",
     "exit",
     "unknown"
 ]

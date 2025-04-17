@@ -28,7 +28,7 @@ class IntentPredictor:
 
         return intent, params
 
-    def predict(self, text, confidence_threshold=0.7):
+    def predict(self, text):
 
         text = re.sub(r"[^\w\s]", "", text)
         processed_text = text.lower().strip()
@@ -48,6 +48,7 @@ class IntentPredictor:
 
         return INTENT_LABELS[pred]     #返回预测意图
 
+#静态方法
     @staticmethod
     def extract_keyword(text, keywords):
 

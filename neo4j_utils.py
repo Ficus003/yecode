@@ -1,6 +1,7 @@
 import pandas as pd
 from py2neo import Graph,Node,Relationship
-
+from config import PREDEFINED_PARAMS
+from predictor import IntentPredictor
 #………………………………………………………………
 #数据库连接
 #………………………………………………………………
@@ -63,27 +64,58 @@ def build_user_profile(rating_csv_path, graph):
 
 #封装知识图谱查询函数
 
-class KHQuery:
+class KGQuery:
     def __init__(self):
         self.graph = safe_graph_connect()
 
-    def fuzzy_query(self, param_type, text):
+    def process_query(self, text):
         """
         判断参数'cuisine''flavor''ingredient'，返回对应模糊查询函数
-        :param param_type: 查询类型, 'cuisine''flavor''ingredient'
         :param text: 用户输入的文本
         :return: 对应模糊查询函数
         """
-        if param_type =="cuisine":
-            return self.query_cuisine(text)
-        elif param_type == "flavor":
-            return self.query_flavor(text)
-        elif param_type == "ingredient":
-            return self.query_ingredient(text)
-        return None
+        intent, param_type = IntentPredictor.parse(text)
+        results = []
+        if intent == "recommend":
+            temp_results = self.query_all_dishes()
+            if "spicy" in param_type:
+                temp_results = [dish for dish in temp_results if dish["spicy"] == PREDEFINED_PARAMS["spicy"].get(param_type["spicy"])]
+            if "calories" in param_type:
+                calories_limit = PREDEFINED_PARAMS["calories"].get(param_type["calories"])
+                temp_results = [dish for dish in temp_results if dish["calories"] <= calories_limit]
+            if "salty" in param_type:
+                salty_limit = PREDEFINED_PARAMS["salty"].get(param_type["salty"])
+                temp_results = [dish for dish in temp_results if dish["salty"] <= salty_limit]
+
+            if "cuisine" in param_type:
+                cuisine_dishes = self.query_cuisine(param_type["cuisine"])
+                temp_results = [dish for dish in temp_results if dish["dish"] in {d["dish"] for d in cuisine_dishes}]
+            if "flavor" in param_type:
+                flavor_dishes = self.query_flavor(param_type["flavor"])
+                temp_results = [dish for dish in temp_results if dish["dish"] in {d["dish"] for d in flavor_dishes}]
+            if "ingredient" in param_type:
+                ingredient_dishes = self.query_ingredient(param_type["ingredient"])
+                temp_results = [dish for dish in temp_results if dish["dish"] in {d["dish"] for d in ingredient_dishes}]
+
+            if "exclude_ingredient" in param_type:
+                exclude_dishes = self.query_exclude_ingredient(param_type["exclude_ingredient"])
+                temp_results = [dish for dish in temp_results if dish["dish"] in {d["dish"] for d in exclude_dishes}]
+
+            results = temp_results
+
+        else:
+            print("无法识别用户意图，返回空列表")
+        return results
 #……………………………………………………………………
 #查询功能
 #……………………………………………………………………
+
+    def query_all_dishes(self):
+        query = """
+        MATCH (d:Dish)
+        RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+        """
+        return self.graph.run(query).data()
 
     def query_cuisine(self, text):
         try:
@@ -92,8 +124,7 @@ class KHQuery:
             MATCH(d:Dish)-[:属于]->(c:Cuisine)
             WHERE toLower(c.name) CONTAINS toLower($text)
             RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
-            ORDER BY length(d.name) ASC
-            LIMIT 1
+            
             """
             return self.graph.run(query, text=text).data()
         except Exception as e:
@@ -107,8 +138,7 @@ class KHQuery:
             MATCH(d:Dish)-[:包含]->(i:Ingredient)
             WHERE toLower(i.name) CONTAINS toLower($text)
             RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
-            ORDER BY length(d.name) ASC
-            LIMIT 1
+            
             """
             return self.graph.run(query, text=text).data()
 
@@ -116,19 +146,88 @@ class KHQuery:
             print(f"[错误]食材查询失败：{str(e)}")
             return []
 
-    def query_flavor(self,text):
+    def query_exclude_ingredient(self, text):
+        try:
+            query = """
+            MATCH (d:Dish)
+            WHERE NOT EXISTS {
+                MATCH (d)-[:包含]->(i:Ingredient)
+                WHERE toLower(i.name) CONTAINS toLower($text)
+            }
+            RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            """
+            return self.graph.run(query, text=text).data()
+        except Exception as e:
+            print(f"[错误]食材查询失败：{str(e)}")
+            return []
+
+
+    def query_flavor(self, text):
         try:
             #SPLIT以逗号分隔，把flavor字符分割成列表
             #ANY关键字检查是否有一个flavor与用户输入的文本对应
+            text_list = [text.lower()]     #转换成列表
             query = """
             MATCH(d:Dish)
-            ANY (flavor IN SPLIT(d.flavor, ',') WHERE toLower(flavor) IN $text)
+            WHERE ANY (flavor IN SPLIT(d.flavor, ',') WHERE toLower(flavor) IN $text)
             RETURN d.name as dish,  d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
-            ORDER BY length(d.name) ASC
-            LIMIT 1
+           
             """
-            return self.graph.run(query, text=text).data()
+            return self.graph.run(query, text=text_list).data()
 
         except Exception as e:
             print(f"[错误]食材查询失败：{str(e)}")
             return []
+
+    def query_spicy(self,spicy_level):
+        spicy_value = PREDEFINED_PARAMS["spicy"].get(spicy_level)
+        if spicy_value is None:
+            print(f"[错误]未找到对应辣度: {spicy_level}")
+            return []
+
+        try:
+            query = """
+            MATCH (d:Dish)
+            WHERE d.spicy = $spicy_value
+            RETURN d.name as dish, d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            """
+            return self.graph.run(query, spicy_value=spicy_value).data()
+        except Exception as e:
+            print(f"[错误]辣度查询失败：{str(e)}")
+            return []
+
+
+    def query_calories(self,calories):
+        calories_value = PREDEFINED_PARAMS["calories"].get(calories)
+        if calories_value is None:
+            print(f"[错误]未找到对应卡路里: {calories}")
+            return []
+
+        try:
+            query = """
+            MATCH (d:Dish)
+            WHERE d.calories <= $calories_value
+            RETURN d.name as dish, d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            """
+            return self.graph.run(query, calories_value=calories_value).data()
+        except Exception as e:
+            print(f"[错误]卡路里查询失败：{str(e)}")
+            return []
+
+    def query_salty(self,salty_level):
+        salty_value = PREDEFINED_PARAMS["salty"].get(salty_level)
+        if salty_value is None:
+            print(f"[错误]未找到对应咸度: {salty_level}")
+            return []
+
+        try:
+            query = """
+            MATCH (d:Dish)
+            WHERE d.salty <= $salty_value
+            RETURN d.name as dish, d.flavor as flavor, d.calories as calories, d.spicy as spicy, d.salty as salty
+            """
+            return self.graph.run(query, salty_value=salty_value).data()
+        except Exception as e:
+            print(f"[错误]咸度查询失败：{str(e)}")
+            return []
+
