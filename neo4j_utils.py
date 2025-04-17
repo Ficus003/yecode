@@ -20,47 +20,51 @@ def safe_graph_connect():
 #………………………………………………………………
 #知识图谱构建
 #………………………………………………………………
+class BuildKnowledgeGraph:
+    def __init__(self):
+        self.graph = safe_graph_connect()
 
-def build_knowledge_graph(csv_path,graph):
+    def build_knowledge_graph(self, csv_path):
 
-    try:
-        df = pd.read_csv(csv_path)
-        graph.delete_all()
+        try:
+            df = pd.read_csv(csv_path)
+            self.graph.delete_all()
 
-        for _,row in df.iterrows():
-            dish = Node("Dish",name=row['name'],
-                        flavor=row['flavor'],
-                        calories=int(row['calories']),
-                        spicy = int(row['spicy']),
-                        salty = int(row['salty']))
-            graph.create(dish)
+            for _,row in df.iterrows():
+                dish = Node("Dish",name=row['name'],
+                            flavor=row['flavor'],
+                            calories=int(row['calories']),
+                            spicy = int(row['spicy']),
+                            salty = int(row['salty']))
+                self.graph.create(dish)
 
-            cuisine = Node("Cuisine",name=row['cuisine'])
-            graph.merge(cuisine,"Cuisine","name")
-            graph.create(Relationship(dish,"属于",cuisine))
+                cuisine = Node("Cuisine",name=row['cuisine'])
+                self.graph.merge(cuisine,"Cuisine","name")
+                self.graph.create(Relationship(dish,"属于",cuisine))
 
-            ingredients = [x.strip() for x in row['ingredients'].split('、')]
-            for ing in ingredients:
-                ingredient = Node("Ingredient",name=ing)
-                graph.merge(ingredient,"Ingredient","name")
-                graph.create(Relationship(dish,"包含",ingredient))
-    except Exception as e:
-        print(f"【ERROR】知识图谱构建失败：{str(e)}")
-        raise
-#创建用户画像图谱
-def build_user_profile(rating_csv_path, graph):
-    try:
-        rating_df = pd.read_csv(rating_csv_path)
-        for _, row in rating_df.iterrows():
-            user = Node("User", user_id=row['user_id'])
-            dish = Node("Dish",name=row['dish_id'])
+                ingredients = [x.strip() for x in row['ingredients'].split('、')]
+                for ing in ingredients:
+                    ingredient = Node("Ingredient",name=ing)
+                    self.graph.merge(ingredient,"Ingredient","name")
+                    self.graph.create(Relationship(dish,"包含",ingredient))
+        except Exception as e:
+            print(f"【ERROR】知识图谱构建失败：{str(e)}")
+            raise
+    #创建用户画像图谱
+    def build_user_profile(self, rating_csv_path):
+        try:
+            rating_df = pd.read_csv(rating_csv_path)
+            for _, row in rating_df.iterrows():
+                user = Node("User", user_id=row['user_id'])
+                dish = Node("Dish",name=row['dish_id'])
+                self.graph.merge(dish, "Dish", "name")
+                self.graph.merge(user, "User","user_id")
+                rated = Relationship(user, "评分", dish, rating=int(row['rating']))
+                self.graph.merge(rated)
 
-            rated = Relationship(user, "评分", dish, rating=int(row['rating']))
-            graph.merge(rated)
-
-    except Exception as e:
-        print(f"【ERROR】知识图谱构建失败：{str(e)}")
-        raise
+        except Exception as e:
+            print(f"【ERROR】知识图谱构建失败：{str(e)}")
+            raise
 
 #封装知识图谱查询函数
 
