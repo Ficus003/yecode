@@ -66,28 +66,39 @@ def combine_results(cf_items, kg_items, cf_weight, n=10):  #alpha:权重系数
     if not cf_items and not kg_items:
         return []
 
+    cf_dict = dict(cf_items)
+    kg_dict = dict(kg_items)
+
     #归一化数值范围
-    cf_scores = normalize([s for _, s in cf_items]) if cf_items else []
-    kg_scores = 1 #默认值
-    combined = {}
+    if cf_items:
+        cf_norm_score = normalize(list(cf_dict.values()))
+        cf_dict = dict(zip(cf_dict.keys(), cf_norm_score))
+
+    if kg_items:
+        kg_norm_score = normalize(list(kg_dict.values()))
+        kg_dict = dict(zip(cf_dict.keys(), kg_norm_score))
 
     #只有cf时
     if cf_items and not kg_items:
-        return cf_items
+        return sorted(cf_dict.items(), key=lambda x: x[1], reverse=True)[:n]
 
     #只有kg时
     if kg_items and not cf_items:
-        return kg_items
+        return sorted(kg_dict.items(), key=lambda x: x[1], reverse=True)[:n]
 
+    combined = []
     #整合cf和kg的结果
-    combined = [
-        (dish, (1 - cf_weight) * kg_scores + cf_weight * cf_scores) for dish, score in cf_scores
-    ] #知识图谱默认权重：(1-alpha)
+    for dish in set(cf_dict.keys()).union(kg_dict.keys()):
+        cf_score = cf_dict.get(dish, 0)
+        kg_score = kg_dict.get(dish, 0)
+        final_score = cf_weight * cf_score + (1 - cf_weight) * kg_score
+        combined.append((dish, final_score))
+    #知识图谱权重：(1-cf_score)
 
     combined.sort(key=lambda x: x[1], reverse=True)
     return combined[:n]
 
-#归一化函数，调用后使CF评分与KG评分缩放在一个范围内
+#归一化函数，调用后使CF评分缩放在（0，1）范围内
 def normalize(scores):
 
     #处理空列表

@@ -75,11 +75,11 @@ class KGQuery:
         :return: 对应模糊查询函数
         """
         intent, param_type = IntentPredictor.parse(text)
-        results = []
+        kg_items = []
         if intent == "recommend":
             temp_results = self.query_all_dishes()
             if "spicy" in param_type:
-                temp_results = [dish for dish in temp_results if dish["spicy"] == PREDEFINED_PARAMS["spicy"].get(param_type["spicy"])]
+                temp_results = [dish for dish in temp_results if dish["spicy"] <= PREDEFINED_PARAMS["spicy"].get(param_type["spicy"])]
             if "calories" in param_type:
                 calories_limit = PREDEFINED_PARAMS["calories"].get(param_type["calories"])
                 temp_results = [dish for dish in temp_results if dish["calories"] <= calories_limit]
@@ -103,9 +103,25 @@ class KGQuery:
 
             results = temp_results
 
+            for dish in temp_results:
+                score = 1.0
+                if "spicy" in param_type:
+                    desired = PREDEFINED_PARAMS["spicy"].get(param_type["spicy"])
+                    score -= abs(dish["spicy"] - desired) * 0.2
+
+                if "calories" in param_type:
+                    desired = PREDEFINED_PARAMS["calories"].get(param_type["calories"])
+                    score -= max(0,(dish["calories"] - desired) / 1000)
+
+                if "salty" in param_type:
+                    desired = PREDEFINED_PARAMS["salty"].get(param_type["salty"])
+                    score -= abs(dish["salty"] - desired) * 0.1
+
+                kg_items.append((dish["dish"],score))
+
         else:
             print("无法识别用户意图，返回空列表")
-        return results
+        return kg_items
 #……………………………………………………………………
 #查询功能
 #……………………………………………………………………
